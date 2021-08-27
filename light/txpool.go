@@ -522,6 +522,17 @@ func (pool *TxPool) RemoveTransactions(txs types.Transactions) {
 	pool.relay.Discard(hashes)
 }
 
+// MevBundles returns a list of bundles valid for the given blockNumber/blockTimestamp
+// also prunes bundles that are outdated
+func (pool *TxPool) MevBundles(blockNumber *big.Int, blockTimestamp uint64) ([]types.Transactions, error) {
+	return nil, nil
+}
+
+// AddMevBundle adds a mev bundle to the pool
+func (pool *TxPool) AddMevBundle(txs types.Transactions, blockNumber *big.Int, minTimestamp uint64, maxTimestamp uint64, revertingTxHashes []common.Hash) error {
+	return nil
+}
+
 // RemoveTx removes the transaction with the given hash from the pool.
 func (pool *TxPool) RemoveTx(hash common.Hash) {
 	pool.mu.Lock()

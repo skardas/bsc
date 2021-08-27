@@ -477,6 +477,11 @@ var (
 		Usage: "Time interval to for broadcast block",
 		Value: ethconfig.Defaults.Miner.DelayLeftOver,
 	}
+	MinerMaxMergedBundles = cli.IntFlag{
+		Name:  "miner.maxmergedbundles",
+		Usage: "flashbots - The maximum amount of bundles to merge. The miner will run this many workers in parallel to calculate if the full block is more profitable with these additional bundles.",
+		Value: 3,
+	}
 	MinerNoVerfiyFlag = cli.BoolFlag{
 		Name:  "miner.noverify",
 		Usage: "Disable remote sealing verification",
@@ -1440,6 +1445,7 @@ func setMiner(ctx *cli.Context, cfg *miner.Config) {
 	if ctx.GlobalIsSet(MinerNoVerfiyFlag.Name) {
 		cfg.Noverify = ctx.GlobalBool(MinerNoVerfiyFlag.Name)
 	}
+	cfg.MaxMergedBundles = ctx.GlobalInt(MinerMaxMergedBundles.Name)
 }
 
 func setWhitelist(ctx *cli.Context, cfg *ethconfig.Config) {
