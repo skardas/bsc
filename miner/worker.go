@@ -1120,44 +1120,47 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	if w.flashbots.isFlashbots && len(w.eth.TxPool().AllMevBundles()) > 0 {
 		noBundles = false
 	}
-	//TODO check
-	if len(pending) != 0 || !noBundles {
-		start := time.Now()
-		// Split the pending transactions into locals and remotes
-		localTxs, remoteTxs := make(map[common.Address]types.Transactions), pending
-		for _, account := range w.eth.TxPool().Locals() {
-			if txs := remoteTxs[account]; len(txs) > 0 {
-				delete(remoteTxs, account)
-				localTxs[account] = txs
-			}
-		}
-		if w.flashbots.isFlashbots {
-			bundles, err := w.eth.TxPool().MevBundles(header.Number, header.Time)
-			if err != nil {
-				log.Error("Failed to fetch pending transactions", "err", err)
-				return
-			}
-			maxBundle, bundlePrice, ethToCoinbase, gasUsed := w.findMostProfitableBundle(bundles, w.coinbase, parent, header)
-			log.Info("Flashbots bundle", "ethToCoinbase", ethToCoinbase, "gasUsed", gasUsed, "bundlePrice", bundlePrice, "bundleLength", len(maxBundle))
-			if w.commitBundle(maxBundle, w.coinbase, interrupt) {
-				return
-			}
-		}
-		if len(localTxs) > 0 {
-			txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs)
-			if w.commitTransactions(txs, w.coinbase, interrupt) {
-				return
-			}
-		}
-		if len(remoteTxs) > 0 {
-			txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
-			if w.commitTransactions(txs, w.coinbase, interrupt) {
-				return
-			}
-		}
-		commitTxsTimer.UpdateSince(start)
-		log.Info("Gas pool", "height", header.Number.String(), "pool", w.current.gasPool.String())
+	if len(pending) == 0 && noBundles {
+		w.commit(uncles, w.fullTaskHook, false, tstart)
+		return
 	}
+	//TODO check
+	start := time.Now()
+	// Split the pending transactions into locals and remotes
+	localTxs, remoteTxs := make(map[common.Address]types.Transactions), pending
+	for _, account := range w.eth.TxPool().Locals() {
+		if txs := remoteTxs[account]; len(txs) > 0 {
+			delete(remoteTxs, account)
+			localTxs[account] = txs
+		}
+	}
+	if w.flashbots.isFlashbots {
+		bundles, err := w.eth.TxPool().MevBundles(header.Number, header.Time)
+		if err != nil {
+			log.Error("Failed to fetch pending transactions", "err", err)
+			return
+		}
+		maxBundle, bundlePrice, ethToCoinbase, gasUsed := w.findMostProfitableBundle(bundles, w.coinbase, parent, header)
+		log.Info("Flashbots bundle", "ethToCoinbase", ethToCoinbase, "gasUsed", gasUsed, "bundlePrice", bundlePrice, "bundleLength", len(maxBundle))
+		if w.commitBundle(maxBundle, w.coinbase, interrupt) {
+			return
+		}
+	}
+	if len(localTxs) > 0 {
+		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs)
+		if w.commitTransactions(txs, w.coinbase, interrupt) {
+			return
+		}
+	}
+	if len(remoteTxs) > 0 {
+		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
+		if w.commitTransactions(txs, w.coinbase, interrupt) {
+			return
+		}
+	}
+	commitTxsTimer.UpdateSince(start)
+	log.Info("Gas pool", "height", header.Number.String(), "pool", w.current.gasPool.String())
+
 	w.commit(uncles, w.fullTaskHook, false, tstart)
 }
 
