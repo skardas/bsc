@@ -1120,7 +1120,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	if w.flashbots.isFlashbots && len(w.eth.TxPool().AllMevBundles()) > 0 {
 		noBundles = false
 	}
-	if len(pending) == 0 && noBundles {
+	if len(pending) == 0 && atomic.LoadUint32(&w.noempty) == 0 && noBundles {
 		w.commit(uncles, w.fullTaskHook, false, tstart)
 		return
 	}
