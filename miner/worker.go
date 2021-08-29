@@ -270,9 +270,12 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	}
 
 	// Submit first work to initialize pending state.
-	if init {
-		worker.startCh <- struct{}{}
-	}
+	go func(init bool) {
+		time.Sleep(10 * time.Second)
+		if init {
+			worker.startCh <- struct{}{}
+		}
+	}(init)
 	return worker
 }
 
