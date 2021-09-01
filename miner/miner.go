@@ -184,7 +184,7 @@ func (miner *Miner) SetRecommitInterval(interval time.Duration) {
 
 // Pending returns the currently pending block and associated state.
 func (miner *Miner) Pending() (*types.Block, *state.StateDB) {
-	if miner.worker.isRunning() {
+	if miner.worker.regularWorker.isRunning() {
 		pendingBlock, pendingState := miner.worker.regularWorker.pending()
 		if pendingState != nil && pendingBlock != nil {
 			return pendingBlock, pendingState
@@ -208,7 +208,7 @@ func (miner *Miner) Pending() (*types.Block, *state.StateDB) {
 // simultaneously, please use Pending(), as the pending state can
 // change between multiple method calls
 func (miner *Miner) PendingBlock() *types.Block {
-	if miner.worker.isRunning() {
+	if miner.worker.regularWorker.isRunning() {
 		pendingBlock := miner.worker.regularWorker.pendingBlock()
 		if pendingBlock != nil {
 			return pendingBlock

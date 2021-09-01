@@ -731,7 +731,6 @@ func (w *worker) generateEnv(parent *types.Block, header *types.Header) (*enviro
 	return env, nil
 }
 
-//TODO check
 // makeCurrent creates a new environment for the current cycle.
 func (w *worker) makeCurrent(parent *types.Block, header *types.Header) error {
 	env, err := w.generateEnv(parent, header)
@@ -814,7 +813,6 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 
 	gasUsed := new(big.Int).SetUint64(receipt.GasUsed)
 	w.current.profit.Add(w.current.profit, gasUsed.Mul(gasUsed, tx.GasPrice()))
-
 	return receipt.Logs, nil
 }
 func (w *worker) commitBundle(txs types.Transactions, coinbase common.Address, interrupt *int32) bool {
@@ -822,7 +820,10 @@ func (w *worker) commitBundle(txs types.Transactions, coinbase common.Address, i
 	if w.current == nil {
 		return true
 	}
-
+	gasLimit := w.current.header.GasLimit
+	if w.current.gasPool == nil {
+		w.current.gasPool = new(core.GasPool).AddGas(gasLimit)
+	}
 	var coalescedLogs []*types.Log
 
 	for _, tx := range txs {
@@ -1131,8 +1132,28 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	if w.flashbots.isFlashbots && len(w.eth.TxPool().AllMevBundles()) > 0 {
 		noBundles = false
 	}
-	if len(pending) != 0 {
+	if !noBundles && w.flashbots.isFlashbots {
+		bundles, err := w.eth.TxPool().MevBundles(header.Number, header.Time)
+		if err != nil {
+			log.Error("Failed to fetch pending transactions", "err", err)
+			return
+		}
 
+		bundleTxs, bundle, numBundles, err := w.generateFlashbotsBundle(bundles, w.coinbase, parent, header, pending)
+		if err != nil {
+			log.Error("Failed to generate flashbots bundle", "err", err)
+			return
+		}
+		log.Info("Flashbots bundle", "ethToCoinbase", ethIntToFloat(bundle.totalEth), "gasUsed", bundle.totalGasUsed, "bundleScore", bundle.mevGasPrice, "bundleLength", len(bundleTxs), "numBundles", numBundles, "worker", w.flashbots.maxMergedBundles)
+		if len(bundleTxs) == 0 {
+			return
+		}
+		if w.commitBundle(bundleTxs, w.coinbase, interrupt) {
+			return
+		}
+		w.current.profit.Add(w.current.profit, bundle.totalEth)
+	}
+	if len(pending) != 0 {
 		// Split the pending transactions into locals and remotes
 		localTxs, remoteTxs := make(map[common.Address]types.Transactions), pending
 		for _, account := range w.eth.TxPool().Locals() {
@@ -1140,28 +1161,6 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 				delete(remoteTxs, account)
 				localTxs[account] = txs
 			}
-		}
-
-		if !noBundles && w.flashbots.isFlashbots {
-			bundles, err := w.eth.TxPool().MevBundles(header.Number, header.Time)
-			if err != nil {
-				log.Error("Failed to fetch pending transactions", "err", err)
-				return
-			}
-
-			bundleTxs, bundle, numBundles, err := w.generateFlashbotsBundle(bundles, w.coinbase, parent, header, pending)
-			if err != nil {
-				log.Error("Failed to generate flashbots bundle", "err", err)
-				return
-			}
-			log.Info("Flashbots bundle", "ethToCoinbase", ethIntToFloat(bundle.totalEth), "gasUsed", bundle.totalGasUsed, "bundleScore", bundle.mevGasPrice, "bundleLength", len(bundleTxs), "numBundles", numBundles, "worker", w.flashbots.maxMergedBundles)
-			if len(bundleTxs) == 0 {
-				return
-			}
-			if w.commitBundle(bundleTxs, w.coinbase, interrupt) {
-				return
-			}
-			w.current.profit.Add(w.current.profit, bundle.totalEth)
 		}
 		if len(localTxs) > 0 {
 			txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs)
@@ -1182,7 +1181,8 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
-	s := w.current.state
+	receipts := copyReceipts(w.current.receipts)
+	s := w.current.state.Copy()
 	block, receipts, err := w.engine.FinalizeAndAssemble(w.chain, types.CopyHeader(w.current.header), s, w.current.txs, uncles, w.current.receipts)
 	if err != nil {
 		return err
